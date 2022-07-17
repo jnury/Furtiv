@@ -5,7 +5,7 @@ using System.Runtime.InteropServices;
 // General Information about an assembly is controlled through the following
 // set of attributes. Change these attribute values to modify the information
 // associated with an assembly.
-[assembly: AssemblyTitle("Furtiv Console Wrapper")]
+[assembly: AssemblyTitle("Furtiv Console App Wrapper")]
 [assembly: AssemblyDescription("Launch Windows command line tool (like PowerShell) without any window")]
 [assembly: AssemblyConfiguration("")]
 [assembly: AssemblyCompany("")]

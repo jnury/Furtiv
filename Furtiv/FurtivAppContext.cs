@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Drawing;
 using System.Windows.Forms;
 using System.Diagnostics;
 
@@ -7,86 +6,112 @@ namespace Furtiv
 {
     internal class FurtivAppContext : ApplicationContext
     {
-        //Component declarations
-        private NotifyIcon TrayIcon;
-        private ContextMenuStrip TrayIconContextMenu;
-        private ToolStripMenuItem QuitMenuItem;
-        private ToolStripMenuItem LogsMenuItem;
+        private FurtivParameters Parameters;
+        private FurtivLogger Logger;
+        private Process ConsoleAppProcess;
 
-        public FurtivAppContext()
+        public FurtivAppContext(string[] args)
         {
-            Application.ApplicationExit += new EventHandler(this.OnApplicationExit);
+            Parameters = new FurtivParameters(args);
+            Logger = new FurtivLogger(Parameters);
 
-            InitializeComponent();
+            // Display help message if needed
+            if (Parameters.ShowHelp || args.Length == 0)
+            {
+                string caption = "Furtiv App Console Wrapper Help";
+                string helpText = @"Furtiv is a console application wrapper for Windows. It's intended to launch command line tools (like PowerShell scripts) without displaying a window.
 
-            RunConsoleApp();
-        }
+Command line parameters:
 
-        private void InitializeComponent()
-        {
-            TrayIcon = new NotifyIcon();
+-Help (or -h): display help message
+-LogFolder path_to_log: create logs in specified log folder
+-PowerShell: use PowerShell interpreter for the command
+-EncodedCommand: use PowerShell EncodedCommand argument
 
-            TrayIcon.BalloonTipIcon = ToolTipIcon.Info;
-            TrayIcon.Text = "Furtiv Console Wrapper";
+See full documentation at https://github.com/jnury/Furtiv";
+                MessageBoxButtons buttons = MessageBoxButtons.OK;
+                DialogResult result = MessageBox.Show(helpText, caption, buttons);
+                Environment.Exit(0);
+            }
 
-            TrayIcon.Icon = Properties.Resources.PowerShellIcon;
+            // Exits if no command line was provided
+            else if(String.IsNullOrEmpty(Parameters.FileName))
+            {
 
-            TrayIconContextMenu = new ContextMenuStrip();
-            QuitMenuItem = new ToolStripMenuItem();
-            LogsMenuItem = new ToolStripMenuItem();
-            TrayIconContextMenu.SuspendLayout();
+                Logger.Log($"ERROR: No executable was provided. Received arguments: '{String.Join(" ", args)}'");
 
-            // 
-            // Tray Icon Context Menu
-            // 
-            this.TrayIconContextMenu.Items.AddRange(new ToolStripItem[] { this.LogsMenuItem });
-            this.TrayIconContextMenu.Items.AddRange(new ToolStripItem[] { this.QuitMenuItem });
-            this.TrayIconContextMenu.Name = "TrayIconContextMenu";
-            this.TrayIconContextMenu.Size = new Size(101, 70);
+                string caption = "Furtiv App Console Wrapper";
+                string errorMessage = "No executable was provided";
+                MessageBoxButtons buttons = MessageBoxButtons.OK;
+                DialogResult result = MessageBox.Show(errorMessage, caption, buttons, MessageBoxIcon.Error);
 
-            // 
-            // View Logs Menu Item
-            // 
-            this.LogsMenuItem.Name = "LogsMenuItem";
-            this.LogsMenuItem.Size = new Size(100, 22);
-            this.LogsMenuItem.Text = "View logs";
-            this.LogsMenuItem.Click += new EventHandler(this.CloseMenuItem_Click);
+                Environment.Exit(1);
+            }
 
-            // 
-            // Quit Menu Item
-            // 
-            this.QuitMenuItem.Name = "QuitMenuItem";
-            this.QuitMenuItem.Size = new Size(100, 22);
-            this.QuitMenuItem.Text = "Quit";
-            this.QuitMenuItem.Click += new EventHandler(this.CloseMenuItem_Click);
+            // Launch Console if everything is OK
+            ConsoleAppProcess = new Process();
+            ConsoleAppProcess.StartInfo.FileName = Parameters.FileName;
 
-            TrayIconContextMenu.ResumeLayout(false);
+            if (Parameters.Arguments.Length > 0)
+            {
+                Logger.Log($"Launching Console App '{Parameters.FileName}' with arguments: '{Parameters.Arguments}'");
+                ConsoleAppProcess.StartInfo.Arguments = Parameters.Arguments;
+            }
+            else
+            {
+                Logger.Log($"Launching Console App '{Parameters.FileName}' without argument");
+            }
 
-            TrayIcon.ContextMenuStrip = TrayIconContextMenu;
+            // Process start info
+            ConsoleAppProcess.StartInfo.WindowStyle            = ProcessWindowStyle.Hidden;
+            ConsoleAppProcess.StartInfo.UseShellExecute        = false;
+            ConsoleAppProcess.StartInfo.CreateNoWindow         = true;
+            ConsoleAppProcess.StartInfo.RedirectStandardOutput = true;
+            ConsoleAppProcess.StartInfo.RedirectStandardError  = true;
 
-            TrayIcon.Visible = true;
-        }
+            // Process event handlers
+            ConsoleAppProcess.EnableRaisingEvents = true;
+            ConsoleAppProcess.Exited             += new EventHandler(ConsoleAppExited);
+            ConsoleAppProcess.OutputDataReceived += new DataReceivedEventHandler(ConsoleAppOutputReceived);
+            ConsoleAppProcess.ErrorDataReceived  += new DataReceivedEventHandler(ConsoleAppErrorReceived);
 
-        private void OnApplicationExit(object sender, EventArgs e)
-        {
-            //Cleanup so that the icon will be removed when the application is closed
-            TrayIcon.Visible = false;
-        }
-
-        private void CloseMenuItem_Click(object sender, EventArgs e)
-        {
-            Application.Exit();
+            try
+            {
+                ConsoleAppProcess.Start();
+                ConsoleAppProcess.BeginOutputReadLine();
+                ConsoleAppProcess.BeginErrorReadLine();
+                Logger.Log($"Successfully created Console App process with ID {ConsoleAppProcess.Id}");
+            }
+            catch (Exception e)
+            {
+                Logger.Log($"ERROR: Failed to start process. Message: {e.Message}");
+            }
         }
     
-        private void RunConsoleApp()
+        // Event when Console App exits
+        private void ConsoleAppExited(object sender, EventArgs e)
         {
-            Process process = new Process();
-            // Configure the process using the StartInfo properties.
-            process.StartInfo.FileName = "powershell.exe";
-            process.StartInfo.Arguments = "-ExecutionPolicy Unrestricted -NoLogo -WindowStyle Hidden -Command C:\\Temp\\Test.ps1";
-            process.StartInfo.WindowStyle = ProcessWindowStyle.Hidden;
-            process.Start();
-            process.WaitForExit();
+            int ConsoleAppExitCode = ConsoleAppProcess.ExitCode;
+            Logger.Log($"Console App exited with code {ConsoleAppExitCode}");
+            Environment.Exit(ConsoleAppExitCode);
+        }
+
+        // Event when there is something to read in Console App StdOut
+        private void ConsoleAppOutputReceived(object sender, DataReceivedEventArgs e)
+        {
+            if (!String.IsNullOrEmpty(e.Data))
+            {
+                Logger.AppOutputLog(e.Data);
+            }
+        }
+
+        // Event when there is something to read in Console App StdErr
+        private void ConsoleAppErrorReceived(object sender, DataReceivedEventArgs e)
+        {
+            if (!String.IsNullOrEmpty(e.Data))
+            {
+                Logger.AppErrorLog(e.Data);
+            }
         }
     }
 }

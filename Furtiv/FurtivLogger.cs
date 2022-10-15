@@ -42,11 +42,6 @@ namespace Furtiv
                 LoggingEnabled = false;
                 AppLoggingEnabled = false;
             }
-
-            if (Parameters.AppType == "PowerShell")
-            {
-                DecodeCliXml = true;
-            }
         }
 
         private void OutFile(String FilePath, String Message)
@@ -89,6 +84,11 @@ namespace Furtiv
         {
             if (AppLoggingEnabled)
             {
+                if (Message.StartsWith("#< CLIXML"))
+                {
+                    DecodeCliXml = true;
+                }
+
                 if (DecodeCliXml)
                 {
                     XmlDocument xmlMessage = new XmlDocument();

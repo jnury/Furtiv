@@ -28,15 +28,8 @@ namespace Furtiv
             {
                 if (!String.IsNullOrEmpty(FileName))
                 {
-                    // We already have started building the commandline -> all remaings args are added to arguments
-                    if (args[i].Contains(" "))
-                    {
-                        Arguments = $"{Arguments} \"{args[i]}\"";
-                    }
-                    else
-                    {
-                        Arguments = $"{Arguments} {args[i]}";
-                    }
+                    // We already have started building the commandline -> all remainings args are added to arguments
+                    Arguments = $"{Arguments} \"{args[i]}\"";
                 }
                 else
                 {
